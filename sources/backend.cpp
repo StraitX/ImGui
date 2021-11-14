@@ -149,8 +149,7 @@ Result ImGuiBackend::Initialize(const RenderPass *pass){
 
         m_TextureSampler = Sampler::Create(font_text_sampler_props);
         
-		m_ImGuiFont = Texture2D::Create(width, height, TextureFormat::RGBA8, TextureUsageBits::Sampled | TextureUsageBits::TransferDst);
-		m_ImGuiFont->ChangeLayout(TextureLayout::ShaderReadOnlyOptimal);
+		m_ImGuiFont = Texture2D::Create(width, height, TextureFormat::RGBA8, TextureUsageBits::Sampled | TextureUsageBits::TransferDst, TextureLayout::ShaderReadOnlyOptimal);
 		m_ImGuiFont->Copy(pixels, Vector2u(width, height));
 
 		io.Fonts->SetTexID(m_ImGuiFont);
