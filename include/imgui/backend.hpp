@@ -33,7 +33,7 @@ private:
 private:
 	Texture2D *m_ImGuiFont      = nullptr;
     Sampler   *m_TextureSampler = nullptr;
-	ImTextureID m_LastTexId = nullptr;
+	Texture2D *m_LastTexId = nullptr;
     ImGuiContext *m_Context = nullptr;
 
     const RenderPass  *m_FramebufferPass    = nullptr;
@@ -92,6 +92,8 @@ private:
     void BeginDrawing();
     
     void EndDrawing(const Semaphore *wait, const Semaphore *signal);
+
+    void Flush();
 };
 
 #endif//STRAITX_IMGUI_BACKEND_HPP

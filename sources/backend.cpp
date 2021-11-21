@@ -285,6 +285,14 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 				continue;
 			}
 
+			if(m_LastTexId != cmd.GetTexID()){
+				m_LastTexId = (Texture2D*)cmd.GetTexID();
+
+				Flush();
+
+				m_Set->UpdateTextureBinding(1, 0, m_LastTexId, m_TextureSampler);
+			}
+
 			ImVec4 clip_rect;
 			clip_rect.x = (cmd.ClipRect.x - clip_off.x) * clip_scale.x;
 			clip_rect.y = (cmd.ClipRect.y - clip_off.y) * clip_scale.y;
@@ -300,15 +308,14 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 			Vector2f offset(clip_rect.x, clip_rect.y);
 			Vector2f extent(clip_rect.z - clip_rect.x, clip_rect.w - clip_rect.y);
 
+			m_CmdBuffer->Bind(m_Set);
 			m_CmdBuffer->SetScissor(offset.x, offset.y, extent.x, extent.y);
 			m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
 			m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint16);
 			m_CmdBuffer->DrawIndexed(cmd.ElemCount, cmd.IdxOffset);
 		}
 
-		EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
-		m_SemaphoreRing->Advance();
-		BeginDrawing();
+		Flush();
 	}
 	EndDrawing(m_SemaphoreRing->Current(), signal_semaphore);
 	m_SemaphoreRing->End();
@@ -372,7 +379,6 @@ void ImGuiBackend::BeginDrawing(){
 	auto window_size = m_CurrentFramebuffer->Size();
 	m_CmdBuffer->Begin();
 	m_CmdBuffer->Bind(m_Pipeline);
-	m_CmdBuffer->Bind(m_Set);
 	m_CmdBuffer->SetViewport(0, 0, window_size.x, window_size.y);
 
 	m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_CurrentFramebuffer);
@@ -383,4 +389,10 @@ void ImGuiBackend::EndDrawing(const Semaphore *wait, const Semaphore *signal){
 	m_CmdBuffer->End();
 
 	GPU::Execute(m_CmdBuffer, *wait, *signal, *m_DrawingFence);
+}
+
+void ImGuiBackend::Flush(){
+	EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
+	m_SemaphoreRing->Advance();
+	BeginDrawing();
 }
