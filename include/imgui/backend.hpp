@@ -37,7 +37,6 @@ private:
     ImGuiContext *m_Context = nullptr;
 
     const RenderPass  *m_FramebufferPass    = nullptr;
-    const Framebuffer *m_CurrentFramebuffer = nullptr;
     const DescriptorSetLayout *m_SetLayout  = nullptr;
     DescriptorSetPool         *m_SetPool    = nullptr;
     DescriptorSet             *m_Set        = nullptr;
@@ -80,20 +79,17 @@ public:
 
     void Finalize();
 
-    void BeginFrame(const Framebuffer *fb, Vector2s mouse_position, float dt, const Semaphore *wait_semaphore);
+    void NewFrame(float dt, Vector2s mouse_pos, Vector2s window_size);
 
-    void EndFrame(const Semaphore *signal_semaphore);
+    void RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal);
 
     void HandleEvent(const Event &e);
 
     ImGuiIO &GetIO();
 private:
-
-    void BeginDrawing();
+    void BeginDrawing(const Framebuffer *fb);
     
     void EndDrawing(const Semaphore *wait, const Semaphore *signal);
-
-    void Flush();
 };
 
 #endif//STRAITX_IMGUI_BACKEND_HPP

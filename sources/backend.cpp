@@ -222,14 +222,10 @@ void ImGuiBackend::Finalize(){
     ImGui::DestroyContext(m_Context);
 }
 
-void ImGuiBackend::BeginFrame(const Framebuffer *fb, Vector2s mouse_position, float dt, const Semaphore *wait_semaphore){
-    SX_CORE_ASSERT(m_CurrentFramebuffer == nullptr, "ImGuiBackend: You should call EndFrame before next BeginFrame call");
-    m_CurrentFramebuffer = fb;
-	m_SemaphoreRing->Begin(wait_semaphore);
-
+void ImGuiBackend::NewFrame(float dt, Vector2s mouse_position, Vector2s window_size){
     ImGui::SetCurrentContext(m_Context);
     ImGuiIO& io = GetIO();
-    io.DisplaySize = ImVec2(fb->Size().x, fb->Size().y);
+    io.DisplaySize = ImVec2(window_size.x, window_size.y);
     io.DeltaTime = dt;
     io.MousePos = ImVec2(mouse_position.x/io.DisplayFramebufferScale.x, mouse_position.y/io.DisplayFramebufferScale.y);
 
@@ -243,7 +239,8 @@ void ImGuiBackend::BeginFrame(const Framebuffer *fb, Vector2s mouse_position, fl
 	ImGui::NewFrame();
 }
 
-void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
+void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal){
+	m_SemaphoreRing->Begin(wait);
 
 	ImGui::Render();
 
@@ -260,7 +257,7 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 
 	m_TransformUniformBuffer->Copy(&uniform, sizeof(uniform));
 
-	BeginDrawing();
+	BeginDrawing(fb);
 	
 	for(int i = 0; i<data->CmdListsCount; i++){
 		
@@ -288,7 +285,9 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 			if(m_LastTexId != cmd.GetTexID()){
 				m_LastTexId = (Texture2D*)cmd.GetTexID();
 
-				Flush();
+				EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
+				m_SemaphoreRing->Advance();
+				BeginDrawing(fb);
 
 				m_Set->UpdateTextureBinding(1, 0, m_LastTexId, m_TextureSampler);
 			}
@@ -314,10 +313,12 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 			m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint16);
 			m_CmdBuffer->DrawIndexed(cmd.ElemCount, cmd.IdxOffset);
 		}
-
-		Flush();
+		
+		EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
+		m_SemaphoreRing->Advance();
+		BeginDrawing(fb);
 	}
-	EndDrawing(m_SemaphoreRing->Current(), signal_semaphore);
+	EndDrawing(m_SemaphoreRing->Current(), signal);
 	m_SemaphoreRing->End();
 
 	ImGuiIO& io = GetIO();
@@ -325,7 +326,6 @@ void ImGuiBackend::EndFrame(const Semaphore *signal_semaphore){
 	for(int i = 0; i<lengthof(io.MouseDown); i++)
 		io.MouseDown[i] = false;
 
-    m_CurrentFramebuffer = nullptr;
 }
 
 void ImGuiBackend::HandleEvent(const Event &e){
@@ -373,15 +373,15 @@ ImGuiIO &ImGuiBackend::GetIO(){
 	return ImGui::GetIO();
 }
 
-void ImGuiBackend::BeginDrawing(){
+void ImGuiBackend::BeginDrawing(const Framebuffer *fb){
 	m_DrawingFence->WaitAndReset();
 
-	auto window_size = m_CurrentFramebuffer->Size();
+	auto window_size = fb->Size();
 	m_CmdBuffer->Begin();
 	m_CmdBuffer->Bind(m_Pipeline);
 	m_CmdBuffer->SetViewport(0, 0, window_size.x, window_size.y);
 
-	m_CmdBuffer->BeginRenderPass(m_FramebufferPass, m_CurrentFramebuffer);
+	m_CmdBuffer->BeginRenderPass(m_FramebufferPass, fb);
 }
 
 void ImGuiBackend::EndDrawing(const Semaphore *wait, const Semaphore *signal){
@@ -389,10 +389,4 @@ void ImGuiBackend::EndDrawing(const Semaphore *wait, const Semaphore *signal){
 	m_CmdBuffer->End();
 
 	GPU::Execute(m_CmdBuffer, *wait, *signal, *m_DrawingFence);
-}
-
-void ImGuiBackend::Flush(){
-	EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
-	m_SemaphoreRing->Advance();
-	BeginDrawing();
 }
