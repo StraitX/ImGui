@@ -229,13 +229,6 @@ void ImGuiBackend::NewFrame(float dt, Vector2s mouse_position, Vector2s window_s
     io.DeltaTime = dt;
     io.MousePos = ImVec2(mouse_position.x/io.DisplayFramebufferScale.x, mouse_position.y/io.DisplayFramebufferScale.y);
 
-    if(Mouse::IsButtonPressed(Mouse::Left))
-		io.MouseDown[ImGuiMouseButton_Left] = true;
-	if(Mouse::IsButtonPressed(Mouse::Right))
-		io.MouseDown[ImGuiMouseButton_Right] = true;
-	if(Mouse::IsButtonPressed(Mouse::Middle))
-		io.MouseDown[ImGuiMouseButton_Middle] = true;
-
 	ImGui::NewFrame();
 }
 
@@ -320,15 +313,9 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 	}
 	EndDrawing(m_SemaphoreRing->Current(), signal);
 	m_SemaphoreRing->End();
-
-	ImGuiIO& io = GetIO();
-
-	for(int i = 0; i<lengthof(io.MouseDown); i++)
-		io.MouseDown[i] = false;
-
 }
 
-void ImGuiBackend::HandleEvent(const Event &e){
+bool ImGuiBackend::HandleEvent(const Event &e){
 	ImGuiIO &io = GetIO();
 
 	switch(e.Type){
@@ -363,9 +350,27 @@ void ImGuiBackend::HandleEvent(const Event &e){
 	case EventType::MouseWheel:
     	io.MouseWheel += (float)e.MouseWheel.Delta/2.f;
 		break;
+	case EventType::MouseButtonPress:
+		if(e.MouseButtonRelease.Button == Mouse::Left)
+			io.MouseDown[ImGuiMouseButton_Left] = true;
+		if(e.MouseButtonRelease.Button == Mouse::Right)
+			io.MouseDown[ImGuiMouseButton_Right] = true;
+		if(e.MouseButtonRelease.Button == Mouse::Middle)
+			io.MouseDown[ImGuiMouseButton_Middle] = true;
+		break;
+	case EventType::MouseButtonRelease:
+		if(e.MouseButtonRelease.Button == Mouse::Left)
+			io.MouseDown[ImGuiMouseButton_Left] = false;
+		if(e.MouseButtonRelease.Button == Mouse::Right)
+			io.MouseDown[ImGuiMouseButton_Right] = false;
+		if(e.MouseButtonRelease.Button == Mouse::Middle)
+			io.MouseDown[ImGuiMouseButton_Middle] = false;
+		break;
 	default:
 		(void)0;
 	}
+
+	return io.WantCaptureMouse;
 }
 
 ImGuiIO &ImGuiBackend::GetIO(){

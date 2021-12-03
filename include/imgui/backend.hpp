@@ -82,8 +82,8 @@ public:
     void NewFrame(float dt, Vector2s mouse_pos, Vector2s window_size);
 
     void RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal);
-
-    void HandleEvent(const Event &e);
+    
+    bool HandleEvent(const Event &e);
 
     ImGuiIO &GetIO();
 private:
