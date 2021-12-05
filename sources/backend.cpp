@@ -96,7 +96,7 @@ u32 ImGuiBackend::SemaphoreRing::NextIndex(){
 }
 
 
-Result ImGuiBackend::Initialize(const RenderPass *pass){
+ImGuiBackend::ImGuiBackend(const RenderPass *pass){
     m_Context = ImGui::CreateContext();
     ImGui::SetCurrentContext(m_Context);
 
@@ -190,11 +190,9 @@ Result ImGuiBackend::Initialize(const RenderPass *pass){
 	m_Set->UpdateTextureBinding(1, 0, m_ImGuiFont, m_TextureSampler);
 
     m_DrawingFence->Signal();
-
-    return Result::Success;
 }
 
-void ImGuiBackend::Finalize(){
+ImGuiBackend::~ImGuiBackend(){
     m_DrawingFence->WaitAndReset();
 
     delete m_VertexBuffer;

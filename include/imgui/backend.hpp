@@ -75,9 +75,9 @@ private:
     Buffer *m_IndexBuffer  = nullptr;
     Buffer *m_TransformUniformBuffer = nullptr;
 public:
-    Result Initialize(const RenderPass *pass);
+    ImGuiBackend(const RenderPass *pass);
 
-    void Finalize();
+    ~ImGuiBackend();
 
     void NewFrame(float dt, Vector2s mouse_pos, Vector2s window_size);
 
