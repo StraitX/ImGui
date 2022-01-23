@@ -12,43 +12,13 @@
 #include "graphics/api/buffer.hpp"
 #include "graphics/api/descriptor_set.hpp"
 
-const char *s_VertexShader = R"(
-#version 440 core
-layout(location = 0) in vec2 a_Pos;
-layout(location = 1) in vec2 a_UV;
-layout(location = 2) in vec4 a_Color;
+const char *s_VertexShader = 
+    #include "shaders/imgui.vert.glsl"
+;
 
-layout(location = 0)out vec4 v_Color;
-layout(location = 1)out vec2 v_UV;
-
-layout(binding = 0) uniform Transform{ 
-    vec2 u_Scale; 
-    vec2 u_Translate; 
-};
-
-void main()
-{
-	v_Color = a_Color;
-    v_UV = a_UV;
-    gl_Position = vec4(a_Pos * u_Scale + u_Translate, 0, 1);
-}
-)";
-
-const char *s_FragmentShader = R"(
-#version 440 core
-
-layout(location = 0)in vec4 v_Color;
-layout(location = 1)in vec2 v_UV;
-
-layout(location = 0) out vec4 f_Color;
-
-layout(binding = 1) uniform sampler2D u_Texture;
-
-void main()
-{
-    f_Color = v_Color * texture(u_Texture, v_UV);
-}
-)";
+const char *s_FragmentShader = 
+    #include "shaders/imgui.frag.glsl"
+;
 
 static Array<ShaderBinding, 2> s_ShaderBindings = {
     ShaderBinding(0, 1, ShaderBindingType::UniformBuffer, ShaderStageBits::Vertex),
