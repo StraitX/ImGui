@@ -86,6 +86,8 @@ public:
     bool HandleEvent(const Event &e);
 
     ImGuiIO &GetIO();
+
+    void RebuildFonts();
 private:
     void BeginDrawing(const Framebuffer *fb);
     

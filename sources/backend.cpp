@@ -105,26 +105,7 @@ ImGuiBackend::ImGuiBackend(const RenderPass *pass){
     io.KeyMap[ImGuiKey_Y] = (int)Key::Y;
     io.KeyMap[ImGuiKey_Z] = (int)Key::Z;
 
-    {
-
-        
-		unsigned char *pixels = nullptr;
-		int width = 0;
-		int height = 0;
-		io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-
-        SamplerProperties font_text_sampler_props;
-		font_text_sampler_props.MagFiltering = FilteringMode::Nearest;
-		font_text_sampler_props.MinFiltering = FilteringMode::Nearest;
-
-        m_TextureSampler = Sampler::Create(font_text_sampler_props);
-        
-		m_ImGuiFont = Texture2D::Create(width, height, TextureFormat::RGBA8, TextureUsageBits::Sampled | TextureUsageBits::TransferDst, TextureLayout::ShaderReadOnlyOptimal);
-		m_ImGuiFont->Copy(pixels, Vector2u(width, height));
-
-		io.Fonts->SetTexID(m_ImGuiFont);
-	}
-
+	RebuildFonts();
 
     m_FramebufferPass = pass;
 
@@ -344,6 +325,31 @@ bool ImGuiBackend::HandleEvent(const Event &e){
 ImGuiIO &ImGuiBackend::GetIO(){
 	ImGui::SetCurrentContext(m_Context);
 	return ImGui::GetIO();
+}
+
+void ImGuiBackend::RebuildFonts() {
+	auto& io = GetIO();
+	unsigned char *pixels = nullptr;
+	int width = 0;
+	int height = 0;
+	io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+
+	
+	if (!m_TextureSampler) {
+		SamplerProperties props;
+		props.MagFiltering = FilteringMode::Nearest;
+		props.MinFiltering = FilteringMode::Nearest;
+
+		m_TextureSampler = Sampler::Create(props);
+	}
+	
+	if (m_ImGuiFont)
+		delete m_ImGuiFont;
+
+	m_ImGuiFont = Texture2D::Create(width, height, TextureFormat::RGBA8, TextureUsageBits::Sampled | TextureUsageBits::TransferDst, TextureLayout::ShaderReadOnlyOptimal);
+	m_ImGuiFont->Copy(pixels, Vector2u(width, height));
+
+	io.Fonts->SetTexID(m_ImGuiFont);
 }
 
 void ImGuiBackend::BeginDrawing(const Framebuffer *fb){
