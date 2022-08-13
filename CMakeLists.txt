@@ -12,6 +12,7 @@ set(SX_IMGUI_THIRDPARTY_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
 
 set(SX_IMGUI_SOURCES
     ${SX_IMGUI_SOURCES_DIR}/backend.cpp
+    ${SX_IMGUI_SOURCES_DIR}/widgets.cpp
 )
 
 add_library(StraitXImGui STATIC ${SX_IMGUI_SOURCES})
