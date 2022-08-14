@@ -27,7 +27,7 @@ void DockspaceWindow(const char *name, Vector2s window_size) {
 }
 
 bool InputText(const char* label, String& buffer, ImGuiInputTextFlags flags) {
-    InputText(label, buffer.Data(), buffer.Size() + 1, flags | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data)->int {
+    return InputText(label, buffer.Data(), buffer.Size() + 1, flags | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data)->int {
         if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
         {
             String* str = (String*)data->UserData;
@@ -36,8 +36,6 @@ bool InputText(const char* label, String& buffer, ImGuiInputTextFlags flags) {
         }
         return 0;
     }, &buffer);
-
-    return false;
 }
 
 void Text(StringView text) {
