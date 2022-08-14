@@ -26,4 +26,22 @@ void DockspaceWindow(const char *name, Vector2s window_size) {
     ImGui::PopStyleVar(2);
 }
 
+bool InputText(const char* label, String& buffer, ImGuiInputTextFlags flags) {
+    InputText(label, buffer.Data(), buffer.Size() + 1, flags | ImGuiInputTextFlags_CallbackResize, [](ImGuiInputTextCallbackData *data)->int {
+        if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+        {
+            String* str = (String*)data->UserData;
+            str->Resize(data->BufTextLen);
+            data->Buf = str->Data();
+        }
+        return 0;
+    }, &buffer);
+
+    return false;
+}
+
+void Text(StringView text) {
+    Text("%s", text.Data());
+}
+
 }//namepsace ImGui::
