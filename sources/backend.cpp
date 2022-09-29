@@ -66,7 +66,33 @@ u32 ImGuiBackend::SemaphoreRing::NextIndex(){
 }
 
 
-ImGuiBackend::ImGuiBackend(const RenderPass *pass){
+ImGuiBackend::ImGuiBackend(const RenderPass *pass):
+	m_FramebufferPass(pass),
+    m_SetLayout(
+		DescriptorSetLayout::Create(s_ShaderBindings)
+	),
+    m_SetPool(
+		DescriptorSetPool::Create({1, m_SetLayout.Get()})
+	),
+	m_Set( 
+		m_SetPool->Alloc(), {m_SetPool.Get()}
+	),
+    m_CmdPool(
+		CommandPool::Create()
+	),
+    m_CmdBuffer(
+		{ m_CmdPool->Alloc(), m_CmdPool.Get() }
+	),
+    m_VertexBuffer(
+		Buffer::Create(sizeof(ImDrawVert) * 40, BufferMemoryType::DynamicVRAM, BufferUsageBits::VertexBuffer | BufferUsageBits::TransferDestination)
+	),
+    m_IndexBuffer(
+		Buffer::Create(sizeof(u32)        * 40, BufferMemoryType::DynamicVRAM, BufferUsageBits::IndexBuffer  | BufferUsageBits::TransferDestination)
+	),
+    m_TransformUniformBuffer(
+		Buffer::Create(sizeof(TransformUniform), BufferMemoryType::DynamicVRAM, BufferUsageBits::UniformBuffer | BufferUsageBits::TransferSource)
+	)
+{
     m_Context = ImGui::CreateContext();
     ImGui::SetCurrentContext(m_Context);
 
@@ -107,66 +133,31 @@ ImGuiBackend::ImGuiBackend(const RenderPass *pass){
 
 	RebuildFonts();
 
-    m_FramebufferPass = pass;
-
-    m_SetLayout = DescriptorSetLayout::Create(s_ShaderBindings);
-
-    m_SetPool = DescriptorSetPool::Create({1, m_SetLayout});
-    m_Set = m_SetPool->Alloc();
-
-    m_Shaders[0] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
-    m_Shaders[1] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
-
     {
+		Array<const Shader*, 2> shaders;
+		shaders[0] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
+		shaders[1] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
+
         GraphicsPipelineProperties props;
-        props.Shaders = m_Shaders;
+        props.Shaders = shaders;
         props.VertexAttributes = s_VertexAttributes;
         props.Pass = m_FramebufferPass;
-        props.Layout = m_SetLayout;
+        props.Layout = m_SetLayout.Get();
 
         m_Pipeline = GraphicsPipeline::Create(props);
+
+		delete shaders[0];
+		delete shaders[1];
     }
 
-    m_CmdPool = CommandPool::Create();
-    m_CmdBuffer = m_CmdPool->Alloc();
+    m_Set->UpdateUniformBinding(0, 0, m_TransformUniformBuffer.Get());
+	m_Set->UpdateTextureBinding(1, 0, m_ImGuiFont.Get(), m_TextureSampler.Get());
 
-    m_SemaphoreRing.Construct();
-    m_DrawingFence = new Fence();
-
-    m_VertexBuffer = Buffer::Create(sizeof(ImDrawVert) * 40, BufferMemoryType::DynamicVRAM, BufferUsageBits::VertexBuffer | BufferUsageBits::TransferDestination);
-    m_IndexBuffer  = Buffer::Create(sizeof(u32)        * 40, BufferMemoryType::DynamicVRAM, BufferUsageBits::IndexBuffer  | BufferUsageBits::TransferDestination);
-    m_TransformUniformBuffer = Buffer::Create(sizeof(TransformUniform), BufferMemoryType::DynamicVRAM, BufferUsageBits::UniformBuffer | BufferUsageBits::TransferSource);
-
-    m_Set->UpdateUniformBinding(0, 0, m_TransformUniformBuffer);
-	m_Set->UpdateTextureBinding(1, 0, m_ImGuiFont, m_TextureSampler);
-
-    m_DrawingFence->Signal();
+    m_DrawingFence.Signal();
 }
 
 ImGuiBackend::~ImGuiBackend(){
-    m_DrawingFence->WaitAndReset();
-
-    delete m_VertexBuffer;
-    delete m_IndexBuffer;
-    delete m_TransformUniformBuffer;
-
-    delete m_DrawingFence;
-    m_SemaphoreRing.Destruct();
-
-    m_CmdPool->Free(m_CmdBuffer);
-    delete m_CmdPool;
-
-    delete m_Pipeline;
-
-    for(auto shader: m_Shaders)
-        delete shader;
-    
-    m_SetPool->Free(m_Set);
-    delete m_SetPool;
-    delete m_SetLayout;
-
-    delete m_TextureSampler;
-    delete m_ImGuiFont;
+    m_DrawingFence.WaitAndReset();
 
     ImGui::DestroyContext(m_Context);
 }
@@ -182,7 +173,7 @@ void ImGuiBackend::NewFrame(float dt, Vector2s mouse_position, Vector2s window_s
 }
 
 void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal){
-	m_SemaphoreRing->Begin(wait);
+	m_SemaphoreRing.Begin(wait);
 
 	ImGui::Render();
 
@@ -227,11 +218,11 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 			if(m_LastTexId != cmd.GetTexID()){
 				m_LastTexId = (Texture2D*)cmd.GetTexID();
 
-				EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
-				m_SemaphoreRing->Advance();
+				EndDrawing(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+				m_SemaphoreRing.Advance();
 				BeginDrawing(fb);
 
-				m_Set->UpdateTextureBinding(1, 0, m_LastTexId, m_TextureSampler);
+				m_Set->UpdateTextureBinding(1, 0, m_LastTexId, m_TextureSampler.Get());
 			}
 
 			ImVec4 clip_rect;
@@ -249,19 +240,19 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 			Vector2f offset(clip_rect.x, clip_rect.y);
 			Vector2f extent(clip_rect.z - clip_rect.x, clip_rect.w - clip_rect.y);
 
-			m_CmdBuffer->Bind(m_Set);
+			m_CmdBuffer->Bind(m_Set.Get());
 			m_CmdBuffer->SetScissor(offset.x, offset.y, extent.x, extent.y);
-			m_CmdBuffer->BindVertexBuffer(m_VertexBuffer);
-			m_CmdBuffer->BindIndexBuffer(m_IndexBuffer, IndicesType::Uint16);
+			m_CmdBuffer->BindVertexBuffer(m_VertexBuffer.Get());
+			m_CmdBuffer->BindIndexBuffer(m_IndexBuffer.Get(), IndicesType::Uint16);
 			m_CmdBuffer->DrawIndexed(cmd.ElemCount, cmd.IdxOffset);
 		}
 		
-		EndDrawing(m_SemaphoreRing->Current(), m_SemaphoreRing->Next());
-		m_SemaphoreRing->Advance();
+		EndDrawing(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
+		m_SemaphoreRing.Advance();
 		BeginDrawing(fb);
 	}
-	EndDrawing(m_SemaphoreRing->Current(), signal);
-	m_SemaphoreRing->End();
+	EndDrawing(m_SemaphoreRing.Current(), signal);
+	m_SemaphoreRing.End();
 }
 
 bool ImGuiBackend::HandleEvent(const Event &e){
@@ -343,21 +334,18 @@ void ImGuiBackend::RebuildFonts() {
 		m_TextureSampler = Sampler::Create(props);
 	}
 	
-	if (m_ImGuiFont)
-		delete m_ImGuiFont;
-
 	m_ImGuiFont = Texture2D::Create(width, height, TextureFormat::RGBA8, TextureUsageBits::Sampled | TextureUsageBits::TransferDst, TextureLayout::ShaderReadOnlyOptimal);
 	m_ImGuiFont->Copy(pixels, Vector2u(width, height));
 
-	io.Fonts->SetTexID(m_ImGuiFont);
+	io.Fonts->SetTexID(m_ImGuiFont.Get());
 }
 
 void ImGuiBackend::BeginDrawing(const Framebuffer *fb){
-	m_DrawingFence->WaitAndReset();
+	m_DrawingFence.WaitAndReset();
 
 	auto window_size = fb->Size();
 	m_CmdBuffer->Begin();
-	m_CmdBuffer->Bind(m_Pipeline);
+	m_CmdBuffer->Bind(m_Pipeline.Get());
 	m_CmdBuffer->SetViewport(0, 0, window_size.x, window_size.y);
 
 	m_CmdBuffer->BeginRenderPass(m_FramebufferPass, fb);
@@ -367,5 +355,5 @@ void ImGuiBackend::EndDrawing(const Semaphore *wait, const Semaphore *signal){
 	m_CmdBuffer->EndRenderPass();
 	m_CmdBuffer->End();
 
-	GPU::Execute(m_CmdBuffer, *wait, *signal, *m_DrawingFence);
+	GPU::Execute(m_CmdBuffer.Get(), *wait, *signal, m_DrawingFence);
 }

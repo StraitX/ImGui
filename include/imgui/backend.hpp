@@ -8,7 +8,11 @@
 #include "core/noncopyable.hpp"
 #include "core/result.hpp"
 #include "core/os/events.hpp"
+#include "core/unique_ptr.hpp"
 #include "graphics/api/semaphore.hpp"
+#include "graphics/api/descriptor_set.hpp"
+#include "graphics/api/command_buffer.hpp"
+#include "graphics/api/fence.hpp"
 
 class DescriptorSetLayout;
 class DescriptorSet;
@@ -31,21 +35,20 @@ private:
 		Vector2f u_Translate;
 	};
 private:
-	Texture2D *m_ImGuiFont      = nullptr;
-    Sampler   *m_TextureSampler = nullptr;
-	Texture2D *m_LastTexId = nullptr;
+	UniquePtr<Texture2D> m_ImGuiFont = nullptr;
+    UniquePtr<Sampler> m_TextureSampler = nullptr;
+    Texture2D* m_LastTexId = nullptr;
     ImGuiContext *m_Context = nullptr;
 
     const RenderPass  *m_FramebufferPass    = nullptr;
-    const DescriptorSetLayout *m_SetLayout  = nullptr;
-    DescriptorSetPool         *m_SetPool    = nullptr;
-    DescriptorSet             *m_Set        = nullptr;
+    UniquePtr<DescriptorSetLayout> m_SetLayout;
+    UniquePtr<DescriptorSetPool> m_SetPool;
+    UniquePtr<DescriptorSet, DescriptorSetDeleter> m_Set;
 
-    Array<const Shader *, 2> m_Shaders = {nullptr, nullptr};
-    GraphicsPipeline *m_Pipeline       = nullptr;
+    UniquePtr<GraphicsPipeline> m_Pipeline = nullptr;
 
-    CommandPool   *m_CmdPool   = nullptr;
-    CommandBuffer *m_CmdBuffer = nullptr;
+    UniquePtr<CommandPool> m_CmdPool;
+    UniquePtr<CommandBuffer, CommandBufferDeleter> m_CmdBuffer;
 
     class SemaphoreRing{
     private:
@@ -67,13 +70,13 @@ private:
         u32 NextIndex();
     };
 
-    RawVar<SemaphoreRing> m_SemaphoreRing;
+    SemaphoreRing m_SemaphoreRing;
 
-    Fence *m_DrawingFence = nullptr;
+    Fence m_DrawingFence;
 
-    Buffer *m_VertexBuffer = nullptr;
-    Buffer *m_IndexBuffer  = nullptr;
-    Buffer *m_TransformUniformBuffer = nullptr;
+    UniquePtr<Buffer> m_VertexBuffer;
+    UniquePtr<Buffer> m_IndexBuffer;
+    UniquePtr<Buffer> m_TransformUniformBuffer;
 public:
     ImGuiBackend(const RenderPass *pass);
 
