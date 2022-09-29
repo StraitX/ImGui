@@ -43,36 +43,10 @@ private:
     const RenderPass  *m_FramebufferPass    = nullptr;
     UniquePtr<DescriptorSetLayout> m_SetLayout;
     UniquePtr<DescriptorSetPool> m_SetPool;
-    UniquePtr<DescriptorSet, DescriptorSetDeleter> m_Set;
+    List<DescriptorSet*> m_Sets;
+    size_t m_FreeSetIndex = 0;
 
     UniquePtr<GraphicsPipeline> m_Pipeline = nullptr;
-
-    UniquePtr<CommandPool> m_CmdPool;
-    UniquePtr<CommandBuffer, CommandBufferDeleter> m_CmdBuffer;
-
-    class SemaphoreRing{
-    private:
-        Semaphore LoopingPart[2] = {};
-        const Semaphore *FullRing[3] = {nullptr, nullptr, nullptr};
-        u32 Index = 0;
-    public:
-        SemaphoreRing();
-
-        void Begin(const Semaphore *first);
-
-        void End();
-
-        const Semaphore *Current();
-        const Semaphore *Next();
-
-        void Advance();
-
-        u32 NextIndex();
-    };
-
-    SemaphoreRing m_SemaphoreRing;
-
-    Fence m_DrawingFence;
 
     UniquePtr<Buffer> m_VertexBuffer;
     UniquePtr<Buffer> m_IndexBuffer;
@@ -84,7 +58,7 @@ public:
 
     void NewFrame(float dt, Vector2s mouse_pos, Vector2s window_size);
 
-    void RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal);
+    void CmdRenderFrame(CommandBuffer* cmd_buffer, const Framebuffer *fb);
     
     bool HandleEvent(const Event &e);
 
@@ -92,9 +66,7 @@ public:
 
     void RebuildFonts();
 private:
-    void BeginDrawing(const Framebuffer *fb);
-    
-    void EndDrawing(const Semaphore *wait, const Semaphore *signal);
+    DescriptorSet* MakeNewSet(Texture2D* texture);
 };
 
 #endif//STRAITX_IMGUI_BACKEND_HPP

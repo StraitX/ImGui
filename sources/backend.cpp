@@ -31,57 +31,13 @@ static Array<VertexAttribute, 3> s_VertexAttributes = {
 	VertexAttribute::UNorm8x4,
 };
 
-ImGuiBackend::SemaphoreRing::SemaphoreRing(){
-    FullRing[1] = &LoopingPart[0];
-    FullRing[2] = &LoopingPart[1];
-}
-
-void ImGuiBackend::SemaphoreRing::Begin(const Semaphore *first){
-    SX_CORE_ASSERT(FullRing[0] == nullptr, "ImGuiBackend: SemaphoreRing should be ended");
-    Index = 0;
-    FullRing[0] = first;
-}
-
-void ImGuiBackend::SemaphoreRing::End(){
-    FullRing[0] = nullptr;
-}
-
-const Semaphore *ImGuiBackend::SemaphoreRing::Current(){
-    return FullRing[Index];
-}
-
-const Semaphore *ImGuiBackend::SemaphoreRing::Next(){
-    return FullRing[NextIndex()];
-}
-
-void ImGuiBackend::SemaphoreRing::Advance(){
-    Index = NextIndex();
-}
-
-u32 ImGuiBackend::SemaphoreRing::NextIndex(){
-    u32 next_index = Index + 1;
-    if(next_index == 3)
-        next_index = 1;
-    return next_index;
-}
-
-
 ImGuiBackend::ImGuiBackend(const RenderPass *pass):
 	m_FramebufferPass(pass),
     m_SetLayout(
 		DescriptorSetLayout::Create(s_ShaderBindings)
 	),
     m_SetPool(
-		DescriptorSetPool::Create({1, m_SetLayout.Get()})
-	),
-	m_Set( 
-		m_SetPool->Alloc(), {m_SetPool.Get()}
-	),
-    m_CmdPool(
-		CommandPool::Create()
-	),
-    m_CmdBuffer(
-		{ m_CmdPool->Alloc(), m_CmdPool.Get() }
+		DescriptorSetPool::Create({10, m_SetLayout.Get()})
 	),
     m_VertexBuffer(
 		Buffer::Create(sizeof(ImDrawVert) * 40, BufferMemoryType::DynamicVRAM, BufferUsageBits::VertexBuffer | BufferUsageBits::TransferDestination)
@@ -150,14 +106,12 @@ ImGuiBackend::ImGuiBackend(const RenderPass *pass):
 		delete shaders[1];
     }
 
-    m_Set->UpdateUniformBinding(0, 0, m_TransformUniformBuffer.Get());
-	m_Set->UpdateTextureBinding(1, 0, m_ImGuiFont.Get(), m_TextureSampler.Get());
 
-    m_DrawingFence.Signal();
 }
 
 ImGuiBackend::~ImGuiBackend(){
-    m_DrawingFence.WaitAndReset();
+	for (DescriptorSet* set : m_Sets)
+		m_SetPool->Free(set);
 
     ImGui::DestroyContext(m_Context);
 }
@@ -172,11 +126,10 @@ void ImGuiBackend::NewFrame(float dt, Vector2s mouse_position, Vector2s window_s
 	ImGui::NewFrame();
 }
 
-void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, const Semaphore *signal){
-	m_SemaphoreRing.Begin(wait);
+void ImGuiBackend::CmdRenderFrame(CommandBuffer* cmd_buffer, const Framebuffer* fb){
+	m_FreeSetIndex = 0;
 
 	ImGui::Render();
-
 	const ImDrawData *data = ImGui::GetDrawData();
 
 	ImVec2 clip_off = data->DisplayPos;         // (0,0) unless using multi-viewports
@@ -189,24 +142,57 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 	uniform.u_Translate.y = -1.0f - data->DisplayPos.x * uniform.u_Scale.y;
 
 	m_TransformUniformBuffer->Copy(&uniform, sizeof(uniform));
-
-	BeginDrawing(fb);
 	
-	for(int i = 0; i<data->CmdListsCount; i++){
-		
+	size_t vertex_buffer_size = 0;
+	size_t index_buffer_size  = 0;
+
+	for (int i = 0; i < data->CmdListsCount; i++) {
+		ImDrawList* cmd_list = data->CmdLists[i];
+
+		vertex_buffer_size += cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+		index_buffer_size  += cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+	}
+
+	if(vertex_buffer_size > m_VertexBuffer->Size())
+		m_VertexBuffer->Realloc(vertex_buffer_size);
+
+	if(index_buffer_size > m_IndexBuffer->Size())
+		m_IndexBuffer->Realloc(index_buffer_size);
+
+	size_t vertex_offset = 0;
+	size_t index_offset  = 0;
+	for (int i = 0; i < data->CmdListsCount; i++) {
+
 		ImDrawList* cmd_list = data->CmdLists[i];
 
 		size_t vertex_size = cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
 		size_t index_size = cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
 
-		if(vertex_size > m_VertexBuffer->Size())
-			m_VertexBuffer->Realloc(vertex_size);
+		m_VertexBuffer->Copy(cmd_list->VtxBuffer.Data, vertex_size, vertex_offset);
+		m_IndexBuffer->Copy(cmd_list->IdxBuffer.Data,  index_size,  index_offset);
 
-		if(index_size > m_IndexBuffer->Size())
-			m_IndexBuffer->Realloc(index_size);
+		vertex_offset += vertex_size;
+		index_offset += index_size;
+	}
 
-		m_VertexBuffer->Copy(cmd_list->VtxBuffer.Data, vertex_size);
-		m_IndexBuffer->Copy(cmd_list->IdxBuffer.Data, index_size);
+	auto window_size = fb->Size();
+	cmd_buffer->Bind(m_Pipeline.Get());
+	cmd_buffer->Bind(
+		MakeNewSet(m_ImGuiFont.Get())
+	);
+	cmd_buffer->SetViewport(0, 0, window_size.x, window_size.y);
+
+	cmd_buffer->BeginRenderPass(m_FramebufferPass, fb);
+	cmd_buffer->BindVertexBuffer(m_VertexBuffer.Get());
+	cmd_buffer->BindIndexBuffer(m_IndexBuffer.Get(), IndicesType::Uint16);
+	
+	size_t global_index_offset = 0;
+	size_t global_vertex_offset = 0;
+	for(int i = 0; i<data->CmdListsCount; i++){
+		ImDrawList* cmd_list = data->CmdLists[i];
+
+		size_t vertex_count = cmd_list->VtxBuffer.Size;
+		size_t index_count = cmd_list->IdxBuffer.Size;
 
 		for(const ImDrawCmd &cmd: cmd_list->CmdBuffer){
 			
@@ -216,13 +202,9 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 			}
 
 			if(m_LastTexId != cmd.GetTexID()){
-				m_LastTexId = (Texture2D*)cmd.GetTexID();
-
-				EndDrawing(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
-				m_SemaphoreRing.Advance();
-				BeginDrawing(fb);
-
-				m_Set->UpdateTextureBinding(1, 0, m_LastTexId, m_TextureSampler.Get());
+				cmd_buffer->Bind(
+					MakeNewSet((Texture2D*)cmd.GetTexID())
+				);
 			}
 
 			ImVec4 clip_rect;
@@ -236,23 +218,16 @@ void ImGuiBackend::RenderFrame(const Framebuffer *fb, const Semaphore *wait, con
 			if (clip_rect.y < 0.0f)
 				clip_rect.y = 0.0f;
 
-
 			Vector2f offset(clip_rect.x, clip_rect.y);
 			Vector2f extent(clip_rect.z - clip_rect.x, clip_rect.w - clip_rect.y);
 
-			m_CmdBuffer->Bind(m_Set.Get());
-			m_CmdBuffer->SetScissor(offset.x, offset.y, extent.x, extent.y);
-			m_CmdBuffer->BindVertexBuffer(m_VertexBuffer.Get());
-			m_CmdBuffer->BindIndexBuffer(m_IndexBuffer.Get(), IndicesType::Uint16);
-			m_CmdBuffer->DrawIndexed(cmd.ElemCount, cmd.IdxOffset);
+			cmd_buffer->SetScissor(offset.x, offset.y, extent.x, extent.y);
+			cmd_buffer->DrawIndexed(cmd.ElemCount, cmd.IdxOffset + global_index_offset, global_vertex_offset);
 		}
-		
-		EndDrawing(m_SemaphoreRing.Current(), m_SemaphoreRing.Next());
-		m_SemaphoreRing.Advance();
-		BeginDrawing(fb);
+		global_vertex_offset += vertex_count;
+		global_index_offset += index_count;
 	}
-	EndDrawing(m_SemaphoreRing.Current(), signal);
-	m_SemaphoreRing.End();
+	cmd_buffer->EndRenderPass();
 }
 
 bool ImGuiBackend::HandleEvent(const Event &e){
@@ -340,20 +315,13 @@ void ImGuiBackend::RebuildFonts() {
 	io.Fonts->SetTexID(m_ImGuiFont.Get());
 }
 
-void ImGuiBackend::BeginDrawing(const Framebuffer *fb){
-	m_DrawingFence.WaitAndReset();
+DescriptorSet* ImGuiBackend::MakeNewSet(Texture2D* texture){
+	if (m_FreeSetIndex == m_Sets.Size())
+		m_Sets.Add(m_SetPool->Alloc());
 
-	auto window_size = fb->Size();
-	m_CmdBuffer->Begin();
-	m_CmdBuffer->Bind(m_Pipeline.Get());
-	m_CmdBuffer->SetViewport(0, 0, window_size.x, window_size.y);
+	DescriptorSet *set = m_Sets[m_FreeSetIndex++];
 
-	m_CmdBuffer->BeginRenderPass(m_FramebufferPass, fb);
-}
-
-void ImGuiBackend::EndDrawing(const Semaphore *wait, const Semaphore *signal){
-	m_CmdBuffer->EndRenderPass();
-	m_CmdBuffer->End();
-
-	GPU::Execute(m_CmdBuffer.Get(), *wait, *signal, m_DrawingFence);
+	set->UpdateUniformBinding(0, 0, m_TransformUniformBuffer.Get());
+	set->UpdateTextureBinding(1, 0, texture, m_TextureSampler.Get());
+	return set;
 }
