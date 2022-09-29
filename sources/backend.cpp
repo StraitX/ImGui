@@ -1,5 +1,6 @@
 #include "imgui/backend.hpp"
 #include "core/string.hpp"
+#include "core/pair.hpp"
 #include "graphics/api/graphics_api.hpp"
 #include "graphics/api/swapchain.hpp"
 #include "graphics/api/command_buffer.hpp"
@@ -128,9 +129,23 @@ void ImGuiBackend::NewFrame(float dt, Vector2s mouse_position, Vector2s window_s
 
 void ImGuiBackend::CmdRenderFrame(CommandBuffer* cmd_buffer, const Framebuffer* fb){
 	m_FreeSetIndex = 0;
-
+	m_TexturesCache.Clear();
 	ImGui::Render();
 	const ImDrawData *data = ImGui::GetDrawData();
+
+	for (int i = 0; i < data->CmdListsCount; i++) {
+
+		for (const ImDrawCmd& cmd : data->CmdLists[i]->CmdBuffer) {
+			const Texture2D* texture = (const Texture2D *)cmd.GetTexID();
+
+			if(texture == m_ImGuiFont.Get())
+				continue;
+
+			m_TexturesCache.Add({texture, texture->Layout()});
+			cmd_buffer->ChangeLayout(texture, TextureLayout::ShaderReadOnlyOptimal);
+		}
+	}
+
 
 	ImVec2 clip_off = data->DisplayPos;         // (0,0) unless using multi-viewports
     ImVec2 clip_scale = data->FramebufferScale;
@@ -228,6 +243,9 @@ void ImGuiBackend::CmdRenderFrame(CommandBuffer* cmd_buffer, const Framebuffer* 
 		global_index_offset += index_count;
 	}
 	cmd_buffer->EndRenderPass();
+
+	for (auto tex_layout : m_TexturesCache)
+		cmd_buffer->ChangeLayout(tex_layout.First, tex_layout.Second);
 }
 
 bool ImGuiBackend::HandleEvent(const Event &e){

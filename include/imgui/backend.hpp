@@ -7,6 +7,7 @@
 #include "core/raw_var.hpp"
 #include "core/noncopyable.hpp"
 #include "core/result.hpp"
+#include "core/pair.hpp"
 #include "core/os/events.hpp"
 #include "core/unique_ptr.hpp"
 #include "graphics/api/semaphore.hpp"
@@ -51,6 +52,8 @@ private:
     UniquePtr<Buffer> m_VertexBuffer;
     UniquePtr<Buffer> m_IndexBuffer;
     UniquePtr<Buffer> m_TransformUniformBuffer;
+
+    List <Pair<const Texture2D*, TextureLayout>> m_TexturesCache;
 public:
     ImGuiBackend(const RenderPass *pass);
 
