@@ -44,7 +44,7 @@ private:
     const RenderPass  *m_FramebufferPass    = nullptr;
     UniquePtr<DescriptorSetLayout> m_SetLayout;
     UniquePtr<DescriptorSetPool> m_SetPool;
-    List<DescriptorSet*> m_Sets;
+    List<Pair<DescriptorSet*, const Texture2D *>> m_Sets;
     size_t m_FreeSetIndex = 0;
 
     UniquePtr<GraphicsPipeline> m_Pipeline = nullptr;

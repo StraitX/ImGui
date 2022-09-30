@@ -111,8 +111,8 @@ ImGuiBackend::ImGuiBackend(const RenderPass *pass):
 }
 
 ImGuiBackend::~ImGuiBackend(){
-	for (DescriptorSet* set : m_Sets)
-		m_SetPool->Free(set);
+	for (Pair<DescriptorSet*, const Texture2D *> st: m_Sets)
+		m_SetPool->Free(st.First);
 
     ImGui::DestroyContext(m_Context);
 }
@@ -334,10 +334,16 @@ void ImGuiBackend::RebuildFonts() {
 }
 
 DescriptorSet* ImGuiBackend::MakeNewSet(Texture2D* texture){
-	if (m_FreeSetIndex == m_Sets.Size())
-		m_Sets.Add(m_SetPool->Alloc());
+	for (size_t i = 0; i < m_FreeSetIndex; i++) {
+		const auto& st = m_Sets[i];
+		if (st.Second == texture)
+			return st.First;
+	}
 
-	DescriptorSet *set = m_Sets[m_FreeSetIndex++];
+	if (m_FreeSetIndex == m_Sets.Size())
+		m_Sets.Add({ m_SetPool->Alloc(), texture });
+
+	DescriptorSet *set = m_Sets[m_FreeSetIndex++].First;
 
 	set->UpdateUniformBinding(0, 0, m_TransformUniformBuffer.Get());
 	set->UpdateTextureBinding(1, 0, texture, m_TextureSampler.Get());
