@@ -92,8 +92,8 @@ ImGuiBackend::ImGuiBackend(const RenderPass *pass):
 
     {
 		Array<const Shader*, 2> shaders;
-		shaders[0] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
-		shaders[1] = Shader::Create(ShaderLang::GLSL, ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
+		shaders[0] = Shader::Create(ShaderStageBits::Vertex,   {s_VertexShader,   String::Length(s_VertexShader)  } );
+		shaders[1] = Shader::Create(ShaderStageBits::Fragment, {s_FragmentShader, String::Length(s_FragmentShader)} );
 
         GraphicsPipelineProperties props;
         props.Shaders = shaders;
