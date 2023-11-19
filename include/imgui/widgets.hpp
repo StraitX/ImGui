@@ -1,3 +1,5 @@
+#pragma once
+
 #include "imgui.h"
 #include "core/math/vector2.hpp"
 #include "core/string_view.hpp"

@@ -13,11 +13,13 @@ set(SX_IMGUI_THIRDPARTY_DIR ${PROJECT_SOURCE_DIR}/thirdparty)
 set(SX_IMGUI_SOURCES
     ${SX_IMGUI_SOURCES_DIR}/backend.cpp
     ${SX_IMGUI_SOURCES_DIR}/widgets.cpp
+    ${SX_IMGUI_SOURCES_DIR}/basic_imgui_application.cpp
 )
 
 add_library(StraitXImGui STATIC ${SX_IMGUI_SOURCES})
 target_link_libraries(StraitXImGui 
-    PUBLIC StraitXBase
+    PUBLIC StraitXCore
+    PUBLIC StraitXGraphics
     PUBLIC imgui
 )
 target_include_directories(StraitXImGui 
