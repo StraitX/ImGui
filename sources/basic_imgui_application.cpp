@@ -34,25 +34,31 @@ int BasicImguiApplication::Run() {
 		cl.Restart();
 
 		Tick(dt);
+
+		auto size = m_Window.Size();
 		
-		if (m_Window.IsFocused()) {
+		if (size.x && size.y) {
 
 			m_Backend.NewFrame(dt, Mouse::RelativePosition(m_Window), m_Window.Size());
 
-			OnImGuiRender();
+			OnImGui();
+
+			OnPreRender();
 
 			m_Window.AcquireNextFramebuffer(&acq);
 
 			m_CmdBuffer->Begin();
 			{
 				m_Backend.CmdRenderFrame(m_CmdBuffer.Get(), m_Window.CurrentFramebuffer());
-				OnCustomRender(m_CmdBuffer.Get());
+				OnRender(m_CmdBuffer.Get());
 			}
 			m_CmdBuffer->End();
 
 			GPU::Execute(m_CmdBuffer.Get(), acq, pst, fence);
 			fence.WaitAndReset();
 			m_Window.PresentCurrentFramebuffer(&pst);
+
+			OnPostRender();
 		}
 
 		m_Window.DispatchEvents();

@@ -13,9 +13,13 @@ public:
 
 	virtual void Tick(float dt){ }
 
-	virtual void OnImGuiRender(){ }
+	virtual void OnImGui(){ }
 
-	virtual void OnCustomRender(CommandBuffer *cmd_buffer){ }
+	virtual void OnPreRender(){ }
+
+	virtual void OnRender(CommandBuffer *cmd_buffer){ }
+
+	virtual void OnPostRender(){ }
 
 	virtual void OnEvent(const Event& e);
 
